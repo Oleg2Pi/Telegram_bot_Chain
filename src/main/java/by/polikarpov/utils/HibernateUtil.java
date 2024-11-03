@@ -4,6 +4,7 @@ import by.polikarpov.entity.Person;
 import org.hibernate.HibernateException;
 import org.hibernate.Session;
 import org.hibernate.SessionFactory;
+import org.hibernate.boot.model.naming.ImplicitNamingStrategyJpaCompliantImpl;
 import org.hibernate.cfg.Configuration;
 
 public class HibernateUtil {
