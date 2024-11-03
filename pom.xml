@@ -16,13 +16,6 @@
 
     <dependencies>
 
-        <!-- Telegram Bot -->
-        <dependency>
-            <groupId>org.telegram</groupId>
-            <artifactId>telegrambots</artifactId>
-            <version>6.9.7.1</version>
-        </dependency>
-
         <!-- Hibernate -->
         <dependency>
             <groupId>org.hibernate</groupId>
@@ -43,6 +36,13 @@
             <artifactId>lombok</artifactId>
             <version>1.18.34</version>
             <scope>provided</scope>
+        </dependency>
+
+        <!-- telegram spring boot -->
+        <dependency>
+            <groupId>org.telegram</groupId>
+            <artifactId>telegrambots-spring-boot-starter</artifactId>
+            <version>6.9.7.1</version>
         </dependency>
 
     </dependencies>
