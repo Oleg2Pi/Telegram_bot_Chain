@@ -31,7 +31,10 @@ public class Person implements Serializable {
 
     private String phone;
 
-    @OneToOne(mappedBy = "person", cascade = CascadeType.ALL, fetch = FetchType.LAZY, orphanRemoval = true)
+    @Column(name = "chat_id")
+    private long chatId;
+
+    @OneToOne(mappedBy = "person", cascade = CascadeType.ALL, orphanRemoval = true)
     private ImagePerson image;
 
 }
