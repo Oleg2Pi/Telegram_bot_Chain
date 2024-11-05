@@ -1,20 +1,26 @@
 package by.polikarpov.service;
 
+import by.polikarpov.entity.Executor;
+import by.polikarpov.entity.ImagePerson;
+import by.polikarpov.entity.Person;
+import by.polikarpov.repository.ExecutorDao;
+import by.polikarpov.repository.PersonDao;
 import org.springframework.stereotype.Component;
 import org.telegram.telegrambots.bots.TelegramLongPollingBot;
 import org.telegram.telegrambots.meta.api.methods.GetFile;
 import org.telegram.telegrambots.meta.api.methods.GetUserProfilePhotos;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
-import org.telegram.telegrambots.meta.api.objects.*;
+import org.telegram.telegrambots.meta.api.objects.Message;
+import org.telegram.telegrambots.meta.api.objects.Update;
+import org.telegram.telegrambots.meta.api.objects.User;
+import org.telegram.telegrambots.meta.api.objects.UserProfilePhotos;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.ReplyKeyboardMarkup;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.KeyboardButton;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.KeyboardRow;
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 
-import java.io.ByteArrayOutputStream;
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.io.InputStream;
+import java.io.*;
+import java.net.HttpURLConnection;
 import java.net.URL;
 import java.util.ArrayList;
 import java.util.List;
@@ -22,7 +28,9 @@ import java.util.List;
 @Component
 public class MyTelegramBot extends TelegramLongPollingBot {
 
-    private static UserData userData = new UserData();
+    private Person.PersonBuilder person = Person.builder();
+    private ImagePerson.ImagePersonBuilder image = ImagePerson.builder();
+    private Executor.ExecutorBuilder executor = Executor.builder();
 
     @Override
     public void onUpdateReceived(Update update) {
@@ -37,100 +45,180 @@ public class MyTelegramBot extends TelegramLongPollingBot {
         }
     }
 
-        private void handleTextMessage (Message message){
-            long chatId = message.getChatId();
+    private void handleTextMessage(Message message) {
+        long chatId = message.getChatId();
 
-            if ("/start".equals(message.getText())) {
-                User user = message.getFrom();
-                // Сохраняем данные пользователя
-                userData.setFirstName(user.getFirstName());
-                userData.setLastName(user.getLastName());
-                userData.setUsername(user.getUserName());
+        if ("/start".equals(message.getText())) {
+            User user = message.getFrom();
 
-                // Отправляем кнопку для деления номером телефона
-                sendCallBackMessage(chatId);
-            }
-        }
+            person.firstName(user.getFirstName());
+            person.lastName(user.getLastName());
+            person.usernameTG(user.getUserName());
+            person.chatId(chatId);
 
-        private String getFileUrl (String fileId){
             try {
-                String path = execute(new GetFile(fileId)).getFilePath();
-                return "https://api.telegram.org/file/bot" + getBotToken() + "/" + path;
+                UserProfilePhotos userProfilePhotos = execute(new GetUserProfilePhotos(user.getId()));
+                String photoUrl = null;
+                if (userProfilePhotos.getTotalCount() > 0) {
+                    String fileId = userProfilePhotos.getPhotos().get(0).get(userProfilePhotos.getPhotos().get(0).size() - 1).getFileId();
+                    photoUrl = getFileUrl(fileId);
+                    image.file(downloadImage(photoUrl));
+                }
+            } catch (TelegramApiException e) {
+                throw new RuntimeException(e);
+            }
+
+            // Отправляем кнопку для деления номером телефона
+            sendCallBackMessage(chatId);
+        } else if ("Исполнитель".equals(message.getText()) || "Заказчик".equals(message.getText())) {
+            handleRoleSelection(message);
+        }
+    }
+
+    private byte[] downloadImage(String photoUrl) {
+        byte[] image = null;
+
+        try {
+            URL url = new URL(photoUrl);
+            HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+            connection.setDoInput(true);
+            connection.connect();
+
+            InputStream inputStream = new BufferedInputStream(connection.getInputStream());
+            image = inputStream.readAllBytes();
+
+            inputStream.close();
+            connection.disconnect();
+
+            return image;
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    private String getFileUrl(String fileId) {
+        try {
+            String path = execute(new GetFile(fileId)).getFilePath();
+            return "https://api.telegram.org/file/bot" + getBotToken() + "/" + path;
+        } catch (TelegramApiException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    private void handleRoleSelection(Message message) {
+        if ("Заказчик".equals(message.getText())) {
+            SendMessage sendMessage = new SendMessage();
+            sendMessage.setChatId(message.getChatId());
+            sendMessage.setText("На данный момент заказчик находиться в разработке, доступен исполнитель");
+
+            try {
+                execute(sendMessage);
             } catch (TelegramApiException e) {
                 throw new RuntimeException(e);
             }
         }
+        ExecutorDao executorDao = new ExecutorDao();
 
-        private void sendCallBackMessage ( long chatId){
-            SendMessage sendMessage = new SendMessage();
-            sendMessage.setChatId(String.valueOf(chatId));
-            sendMessage.setText("Нажмите кнопку ниже, чтобы поделиться своим номером телефона:");
+        executor.person(person.build());
+        person.executor(executor.build());
+        executorDao.save(executor.build());
 
-            // Создаем клавиатуру для отправки контакта
-            ReplyKeyboardMarkup keyboardMarkup = new ReplyKeyboardMarkup();
-            keyboardMarkup.setSelective(true);
-            keyboardMarkup.setResizeKeyboard(true);
-            keyboardMarkup.setOneTimeKeyboard(true);
+        SendMessage sendMessage = new SendMessage();
+        sendMessage.setChatId(message.getChatId());
+        sendMessage.setText("Ваш профиль создан. Нажмите на open App, чтобы перейти в него");
 
-            List<KeyboardRow> rows = new ArrayList<>();
-            KeyboardRow row = new KeyboardRow();
-            // Создаем кнопку для отправки контакта
-            KeyboardButton contactButton = new KeyboardButton();
-            contactButton.setText("Поделиться номером");
-            contactButton.setRequestContact(true); // Устанавливаем запрос контакта
-
-            row.add(contactButton);
-            rows.add(row);
-            keyboardMarkup.setKeyboard(rows);
-
-            sendMessage.setReplyMarkup(keyboardMarkup);
-
-            try {
-                execute(sendMessage); // Отправляем сообщение с кнопкой
-            } catch (TelegramApiException e) {
-                e.printStackTrace();
-            }
-        }
-
-        private void handleContactMessage (Message message){
-            long chatId = message.getChatId();
-
-            if (message.hasContact()) {
-                String phoneNumber = message.getContact().getPhoneNumber();
-                userData.setPhoneNumber(phoneNumber);
-
-                SendMessage sendMessage = new SendMessage();
-                sendMessage.setChatId(String.valueOf(chatId));
-                sendMessage.setText("Ваш номер телефона получен.");
-
-                long userId = message.getFrom().getId();
-                try {
-                    UserProfilePhotos userProfilePhotos = execute(new GetUserProfilePhotos(userId));
-                    String photoUrl = null;
-                    if (userProfilePhotos.getTotalCount() > 0) {
-                        String fileId = userProfilePhotos.getPhotos().get(0).get(userProfilePhotos.getPhotos().get(0).size() - 1).getFileId();
-                        photoUrl = getFileUrl(fileId);
-                        System.out.println(photoUrl);
-                    }
-                } catch (TelegramApiException e) {
-                    throw new RuntimeException(e);
-                }
-
-                try {
-                    execute(sendMessage);
-                } catch (TelegramApiException e) {
-                    e.printStackTrace();
-                }
-            }
-        }
-
-        @Override
-        public String getBotUsername () {
-            return "Chain_com_bot";
-        }
-
-        @Override
-        public String getBotToken () {
-            return "7598478971:AAHoHXymfbVhER7jFvTkfAGFboggg196Hy8";
+        try {
+            execute(sendMessage);
+        } catch (TelegramApiException e) {
+            throw new RuntimeException(e);
         }
     }
+
+    private void sendCallBackMessage(long chatId) {
+        SendMessage sendMessage = new SendMessage();
+        sendMessage.setChatId(String.valueOf(chatId));
+        sendMessage.setText("Нажмите кнопку ниже, чтобы поделиться своим номером телефона:");
+
+        // Создаем клавиатуру для отправки контакта
+        ReplyKeyboardMarkup keyboardMarkup = new ReplyKeyboardMarkup();
+        keyboardMarkup.setSelective(true);
+        keyboardMarkup.setResizeKeyboard(true);
+        keyboardMarkup.setOneTimeKeyboard(true);
+
+        List<KeyboardRow> rows = new ArrayList<>();
+        KeyboardRow row = new KeyboardRow();
+        // Создаем кнопку для отправки контакта
+        KeyboardButton contactButton = new KeyboardButton();
+        contactButton.setText("Поделиться номером");
+        contactButton.setRequestContact(true); // Устанавливаем запрос контакта
+
+        row.add(contactButton);
+        rows.add(row);
+        keyboardMarkup.setKeyboard(rows);
+
+        sendMessage.setReplyMarkup(keyboardMarkup);
+
+        try {
+            execute(sendMessage); // Отправляем сообщение с кнопкой
+        } catch (TelegramApiException e) {
+            e.printStackTrace();
+        }
+    }
+
+    private void handleContactMessage(Message message) {
+        long chatId = message.getChatId();
+        PersonDao personDao = new PersonDao();
+
+        if (message.hasContact()) {
+            String phoneNumber = message.getContact().getPhoneNumber();
+            person.phone(phoneNumber);
+            image.person(person.build());
+            person.image(image.build());
+
+            personDao.save(person.build(), image.build());
+
+            sendRoleSelectionMessage(chatId);
+        }
+    }
+
+    private void sendRoleSelectionMessage(long chatId) {
+        SendMessage sendMessage = new SendMessage();
+        sendMessage.setChatId(chatId);
+        sendMessage.setText("Выберите вашу роль");
+
+        ReplyKeyboardMarkup keyboardMarkup = new ReplyKeyboardMarkup();
+        keyboardMarkup.setSelective(true);
+        keyboardMarkup.setResizeKeyboard(true);
+        keyboardMarkup.setOneTimeKeyboard(true);
+
+        List<KeyboardRow> rows = new ArrayList<>();
+        KeyboardRow row = new KeyboardRow();
+
+        KeyboardButton executorButton = new KeyboardButton("Исполнитель");
+        KeyboardButton customerButton = new KeyboardButton("Заказчик");
+
+        row.add(executorButton);
+        row.add(customerButton);
+
+        rows.add(row);
+        keyboardMarkup.setKeyboard(rows);
+
+        sendMessage.setReplyMarkup(keyboardMarkup);
+
+        try {
+            execute(sendMessage);
+        } catch (TelegramApiException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    @Override
+    public String getBotUsername() {
+        return "Chain_com_bot";
+    }
+
+    @Override
+    public String getBotToken() {
+        return "7598478971:AAHoHXymfbVhER7jFvTkfAGFboggg196Hy8";
+    }
+}
