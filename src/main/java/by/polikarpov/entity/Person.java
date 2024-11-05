@@ -37,4 +37,6 @@ public class Person implements Serializable {
     @OneToOne(mappedBy = "person", cascade = CascadeType.ALL, orphanRemoval = true)
     private ImagePerson image;
 
+    @OneToOne(mappedBy = "person", cascade = CascadeType.ALL, orphanRemoval = true)
+    private Executor executor;
 }
