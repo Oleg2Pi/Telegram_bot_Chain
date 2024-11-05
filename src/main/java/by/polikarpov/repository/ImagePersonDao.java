@@ -1,17 +1,19 @@
 package by.polikarpov.repository;
 
-import by.polikarpov.entity.Person;
+import by.polikarpov.entity.ImagePerson;
 import by.polikarpov.utils.HibernateUtil;
 import org.hibernate.Session;
 
-public class PersonDao implements Dao<Person> {
+public class ImagePersonDao implements Dao<ImagePerson>{
 
-    public Person save(Person person) {
+    @Override
+    public ImagePerson save(ImagePerson image) {
         Session session = HibernateUtil.getSession();
+
         try {
             session.beginTransaction();
 
-            session.saveOrUpdate(person);
+            session.save(image);
 
             session.getTransaction().commit();
         } catch (Exception e) {
@@ -23,6 +25,6 @@ public class PersonDao implements Dao<Person> {
             session.close();
         }
 
-        return person;
+        return image;
     }
 }

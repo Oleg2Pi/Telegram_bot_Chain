@@ -4,14 +4,14 @@ import by.polikarpov.entity.Executor;
 import by.polikarpov.utils.HibernateUtil;
 import org.hibernate.Session;
 
-public class ExecutorDao {
+public class ExecutorDao implements Dao<Executor>{
 
-    public void save(Executor executor) {
+    public Executor save(Executor executor) {
         Session session = HibernateUtil.getSession();
         try {
             session.beginTransaction();
 
-            session.save(executor);
+            session.saveOrUpdate(executor);
 
             session.getTransaction().commit();
         } catch (Exception e) {
@@ -22,5 +22,6 @@ public class ExecutorDao {
         } finally {
             session.close();
         }
+        return executor;
     }
 }
