@@ -29,7 +29,7 @@ public class Person {
 
     private String phone;
 
-    @Column(name = "chat_id")
+    @Column(name = "chat_id", unique = true)
     private long chatId;
 
     @OneToOne(mappedBy = "person", cascade = CascadeType.ALL, orphanRemoval = true)
