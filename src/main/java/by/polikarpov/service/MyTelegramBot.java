@@ -4,6 +4,7 @@ import by.polikarpov.entity.Executor;
 import by.polikarpov.entity.ImagePerson;
 import by.polikarpov.entity.Person;
 import by.polikarpov.repository.ExecutorDao;
+import by.polikarpov.repository.ImagePersonDao;
 import by.polikarpov.repository.PersonDao;
 import org.springframework.stereotype.Component;
 import org.telegram.telegrambots.bots.TelegramLongPollingBot;
@@ -106,6 +107,7 @@ public class MyTelegramBot extends TelegramLongPollingBot {
     }
 
     private void handleRoleSelection(Message message) {
+
         if ("Заказчик".equals(message.getText())) {
             SendMessage sendMessage = new SendMessage();
             sendMessage.setChatId(message.getChatId());
@@ -113,25 +115,37 @@ public class MyTelegramBot extends TelegramLongPollingBot {
 
             try {
                 execute(sendMessage);
+                sendRoleSelectionMessage(message.getChatId());
+            } catch (TelegramApiException e) {
+                throw new RuntimeException(e);
+            }
+        } else if ("Исполнитель".equals(message.getText())) {
+            saveAllObjects();
+
+            SendMessage sendMessage = new SendMessage();
+            sendMessage.setChatId(message.getChatId());
+            sendMessage.setText("Ваш профиль создан. Нажмите на open App, чтобы перейти в него");
+            try {
+                execute(sendMessage);
             } catch (TelegramApiException e) {
                 throw new RuntimeException(e);
             }
         }
+    }
+
+    private void saveAllObjects() {
+        PersonDao personDao = new PersonDao();
+        Person savedPerson = personDao.save(person.build());
+
+        ImagePersonDao imagePersonDao = new ImagePersonDao();
+        image.person(savedPerson);
+        ImagePerson savedImage = imagePersonDao.save(image.build());
+        savedPerson.setImage(savedImage);
+
         ExecutorDao executorDao = new ExecutorDao();
-
-        executor.person(person.build());
-        person.executor(executor.build());
-        executorDao.save(executor.build());
-
-        SendMessage sendMessage = new SendMessage();
-        sendMessage.setChatId(message.getChatId());
-        sendMessage.setText("Ваш профиль создан. Нажмите на open App, чтобы перейти в него");
-
-        try {
-            execute(sendMessage);
-        } catch (TelegramApiException e) {
-            throw new RuntimeException(e);
-        }
+        executor.person(savedPerson);
+        Executor savedExecutor = executorDao.save(executor.build());
+        savedPerson.setExecutor(savedExecutor);
     }
 
     private void sendCallBackMessage(long chatId) {
@@ -167,15 +181,10 @@ public class MyTelegramBot extends TelegramLongPollingBot {
 
     private void handleContactMessage(Message message) {
         long chatId = message.getChatId();
-        PersonDao personDao = new PersonDao();
 
         if (message.hasContact()) {
             String phoneNumber = message.getContact().getPhoneNumber();
             person.phone(phoneNumber);
-            image.person(person.build());
-            person.image(image.build());
-
-            personDao.save(person.build(), image.build());
 
             sendRoleSelectionMessage(chatId);
         }
